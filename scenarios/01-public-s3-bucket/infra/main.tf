@@ -1,79 +1,52 @@
-###############################################################################
-# Scenario 01 — Vulnerable (public) S3 bucket
-#
-# ⚠️  This file DELIBERATELY creates an insecure resource for the lab.
-#     Deploy ONLY in a dedicated sandbox account. Run `destroy` when done.
-#
-# This is a SKELETON. The TODOs are where you learn — fill them in yourself.
-###############################################################################
-
-terraform {
-  required_version = ">= 1.7"
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-  }
-}
-
-provider "aws" {
-  region = var.region
-}
-
-variable "region" {
-  description = "AWS region for the lab"
-  type        = string
-  default     = "eu-west-1" # Ireland — close to Spain, full service coverage
-}
-
-variable "bucket_prefix" {
-  description = "Prefix for the deliberately-public bucket name"
-  type        = string
-  default     = "aegis-project-lab-public"
-}
-
-# A random suffix keeps the bucket name globally unique.
 resource "random_id" "suffix" {
   byte_length = 4
 }
 
 resource "aws_s3_bucket" "vulnerable" {
-  bucket = "${var.bucket_prefix}-${random_id.suffix.hex}"
+  bucket = "${var.project_name}-lab-public-${random_id.suffix.hex}"
 
-  # Tag clearly so you never confuse this with anything real.
   tags = {
-    Project   = "aegis-project"
-    Scenario  = "01-public-s3-bucket"
-    Intent    = "INTENTIONALLY-VULNERABLE"
-    ManagedBy = "terraform"
+    Project  = var.project_name
+    Scenario = "01-public-s3-bucket"
+    Intent   = "intentionally-vulnerable"
   }
 }
 
-# TODO: This is the heart of the misconfiguration. To make the bucket public you will
-#       typically need to (a) DISABLE Block Public Access and (b) attach a public ACL or
-#       bucket policy. Implement these resources:
-#
-#   resource "aws_s3_bucket_public_access_block" "vulnerable" {
-#     bucket                  = aws_s3_bucket.vulnerable.id
-#     block_public_acls       = false
-#     block_public_policy     = false
-#     ignore_public_acls      = false
-#     restrict_public_buckets = false
-#   }
-#
-#   resource "aws_s3_bucket_policy" "public_read" {
-#     bucket = aws_s3_bucket.vulnerable.id
-#     policy = jsonencode({ ... allow s3:GetObject to Principal "*" ... })
-#   }
-#
-# Note: tfsec/Checkov in CI WILL flag these — that's expected and intentional here.
-# Suppress with an inline comment that explains it's a controlled lab resource.
+# Scenario 01 deliberately exposes this bucket. Both the public access block
+# and the policy below are insecure ON PURPOSE so the range can detect and
+# remediate them. tfsec/Checkov findings here are expected.
+resource "aws_s3_bucket_public_access_block" "vulnerable" {
+  bucket = aws_s3_bucket.vulnerable.id
 
-# TODO: Optionally upload a harmless "secret looking" sample object so the attack has
-#       something to read (e.g. a fake 'credentials.txt' with obviously fake content).
+  block_public_acls       = false
+  block_public_policy     = false
+  ignore_public_acls      = false
+  restrict_public_buckets = false
+}
 
-output "bucket_name" {
-  value       = aws_s3_bucket.vulnerable.id
-  description = "Name of the deliberately public bucket"
+# Grants anonymous read (Principal "*") to every object: the actual data leak.
+resource "aws_s3_bucket_policy" "public_read" {
+  bucket = aws_s3_bucket.vulnerable.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "PublicRead"
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = "s3:GetObject"
+        Resource  = "${aws_s3_bucket.vulnerable.arn}/*"
+      }
+    ]
+  })
+
+  depends_on = [aws_s3_bucket_public_access_block.vulnerable]
+}
+
+# Decoy object so the attack has something to exfiltrate. Fake content only.
+resource "aws_s3_object" "decoy" {
+  bucket  = aws_s3_bucket.vulnerable.id
+  key     = "credentials.txt"
+  content = "FAKE LAB DATA - not real credentials\nuser=demo\npassword=not-a-real-secret\n"
 }
