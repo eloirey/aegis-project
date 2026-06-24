@@ -1,40 +1,93 @@
-###############################################################################
-# Scenario 01 — Detection: catch the bucket being made public.
-#
-# Strategy: CloudTrail records S3 management API calls. An EventBridge rule matches the
-# relevant call(s) and invokes the detection Lambda.
-#
-# SKELETON — fill in the TODOs.
-###############################################################################
+terraform {
+  required_version = ">= 1.7"
 
-# TODO: An EventBridge rule whose event_pattern matches the CloudTrail events that signal
-#       a bucket being exposed, e.g. eventName in:
-#         - PutBucketAcl
-#         - PutBucketPolicy
-#         - PutPublicAccessBlock
-#         - DeletePublicAccessBlock
-#
-# resource "aws_cloudwatch_event_rule" "s3_public_change" {
-#   name           = "aegis-project-01-s3-public-change"
-#   event_bus_name = var.event_bus_name   # from infra/core outputs
-#   event_pattern  = jsonencode({
-#     source        = ["aws.s3"],
-#     "detail-type" = ["AWS API Call via CloudTrail"],
-#     detail = {
-#       eventSource = ["s3.amazonaws.com"],
-#       eventName   = ["PutBucketAcl", "PutBucketPolicy", "PutPublicAccessBlock",
-#                      "DeletePublicAccessBlock"]
-#     }
-#   })
-# }
-#
-# TODO: A target wiring the rule to the detection Lambda (aws_cloudwatch_event_target),
-#       plus the aws_lambda_permission that lets EventBridge invoke it.
-#
-# TODO: Package detect_handler.py as the Lambda (aws_lambda_function). For a first version
-#       you can zip it inline with the archive_file data source.
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
 
-variable "event_bus_name" {
-  type    = string
-  default = "default"
+provider "aws" {
+  region = var.region
+}
+
+variable "region" {
+  description = "AWS region for the lab"
+  type        = string
+  default     = "eu-west-1"
+}
+
+variable "project_name" {
+  description = "Prefix used to name resources"
+  type        = string
+  default     = "aegis-project"
+}
+
+data "archive_file" "detect_zip" {
+  type        = "zip"
+  source_file = "${path.module}/detect_handler.py"
+  output_path = "${path.module}/detect_handler.zip"
+}
+
+
+
+resource "aws_iam_role" "detect" {
+  name = "${var.project_name}-01-detect-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Action    = "sts:AssumeRole"
+      Principal = { Service = "lambda.amazonaws.com" }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "detect_logs" {
+  role       = aws_iam_role.detect.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+
+
+resource "aws_lambda_function" "detect" {
+  function_name    = "${var.project_name}-01-detect"
+  role             = aws_iam_role.detect.arn
+  handler          = "detect_handler.handler"
+  runtime          = "python3.12"
+  filename         = data.archive_file.detect_zip.output_path
+  source_code_hash = data.archive_file.detect_zip.output_base64sha256
+}
+
+
+
+resource "aws_cloudwatch_event_rule" "s3_public" {
+  name = "${var.project_name}-01-s3-public"
+
+  event_pattern = jsonencode({
+    source      = ["aws.s3"]
+    detail-type = ["AWS API Call via CloudTrail"]
+    detail = {
+      eventSource = ["s3.amazonaws.com"]
+      eventName   = ["PutBucketPolicy"]
+    }
+  })
+}
+
+resource "aws_cloudwatch_event_target" "detect" {
+  rule = aws_cloudwatch_event_rule.s3_public.name
+  arn  = aws_lambda_function.detect.arn
+}
+
+
+
+resource "aws_lambda_permission" "allow_eventbridge" {
+  statement_id  = "AllowEventBridgeInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.detect.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.s3_public.arn
 }
