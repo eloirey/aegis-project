@@ -1,0 +1,26 @@
+# Compliance mapping for Scenario 01.
+# ⚠️ The control IDs below are ILLUSTRATIVE starting points. Before publishing, verify
+# each one against the official source and record the version (see docs/compliance/).
+
+finding_id: PUBLIC_S3_BUCKET
+title: Publicly accessible S3 bucket
+severity: HIGH
+mitre_attack:
+  - "T1530"   # Data from Cloud Storage Object
+
+controls:
+  ens:                          # Esquema Nacional de Seguridad (RD 311/2022) — VERIFY
+    - id: "mp.info"
+      name: "Protección de la información"
+    - id: "op.acc"
+      name: "Control de acceso"
+  nis2:                         # Directive (EU) 2022/2555 — VERIFY
+    - article: "Art. 21"
+      topic: "Cybersecurity risk-management measures"
+  cis_aws:                      # CIS AWS Foundations Benchmark — VERIFY version & id
+    - id: "2.1.x"
+      name: "Ensure S3 buckets block public access"
+
+remediation: >
+  Enable S3 Block Public Access at the bucket (and ideally account) level, and remove any
+  public ACL or bucket policy statement granting access to '*' / AllUsers.

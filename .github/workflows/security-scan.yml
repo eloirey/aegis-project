@@ -1,0 +1,31 @@
+name: IaC Security Scan
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  tfsec:
+    name: tfsec
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tfsec
+        uses: aquasecurity/tfsec-action@v1.0.0
+        with:
+          # The 'scenarios/**/infra' folders are INTENTIONALLY vulnerable.
+          # Keep this job green by adding inline ignores with a justification,
+          # or by excluding those paths. Scanning the CORE infra is the point.
+          soft_fail: true
+
+  checkov:
+    name: checkov
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          quiet: true
+          soft_fail: true
