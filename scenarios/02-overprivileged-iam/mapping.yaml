@@ -1,0 +1,69 @@
+# Compliance mapping for scenario 02 (over-privileged IAM -> privilege escalation).
+# Framework versions are pinned on purpose: control IDs shift between releases,
+# so an unversioned mapping would rot silently.
+#   ENS  -> RD 311/2022 (Art. 20, requisito mínimo) + Anexo II (medidas)
+#   NIS2 -> Directive (EU) 2022/2555, Art. 21(2)
+#   CIS  -> AWS Foundations Benchmark v3.0.0, section 1 (IAM)
+
+scenario: 02-overprivileged-iam
+finding_id: PRIVILEGED_IAM
+summary: >
+  An IAM identity holding a self-IAM-management primitive attached
+  AdministratorAccess to itself, escalating from a single key to full admin.
+  CloudTrail captures the AttachUserPolicy call, the detection Lambda inspects
+  the policy content and raises the finding, and the remediation Lambda attaches
+  a reversible explicit-deny quarantine that neutralises the escalation without
+  detaching anything.
+
+detection:
+  log_source: CloudTrail
+  trigger_events:
+    - AttachUserPolicy
+    - AttachRolePolicy
+    - PutUserPolicy
+    - PutRolePolicy
+  match: managed policy is AdministratorAccess, or inline document allows Action "*" on Resource "*"
+  eventbridge_rule: aegis-project-02-iam-privileged
+
+remediation:
+  actions:
+    - iam:PutUserPolicy   # attaches the 'aegis-quarantine' explicit-deny policy
+    - iam:PutRolePolicy
+  outcome: escalation and persistence actions are denied; the grant is left in place so the action is reversible
+
+compliance:
+  ens:
+    - id: art.20
+      name: Mínimo privilegio
+      rationale: A self-escalating admin grant is the opposite of least privilege; the quarantine restores the minimum necessary access.
+    - id: op.acc.4
+      name: Proceso de gestión de derechos de acceso
+      rationale: The unauthorized AdministratorAccess grant is an uncontrolled change of access rights that the remediation reverses.
+    - id: op.acc.3
+      name: Segregación de funciones y tareas
+      rationale: An identity able to grant itself admin collapses separation of duties; the explicit deny re-imposes that boundary.
+    - id: op.exp.8
+      name: Registro de la actividad
+      rationale: CloudTrail records the AttachUserPolicy event that makes detection possible.
+    - id: op.mon.1
+      name: Detección de intrusión
+      rationale: The EventBridge rule and detection Lambda surface the escalation in near real time.
+
+  nis2:
+    - id: Art. 21(2)(i)
+      name: Access control policies and asset management
+      rationale: The quarantine deny re-enforces the access control policy on the compromised identity.
+    - id: Art. 21(2)(b)
+      name: Incident handling
+      rationale: The automated detect-and-remediate loop is the incident-handling response for this escalation.
+    - id: Art. 21(2)(e)
+      name: Security in acquisition, development and maintenance (vulnerability handling)
+      rationale: The over-permissioned identity is treated as a vulnerability that is detected and contained automatically.
+
+  cis_aws:
+    - id: "1.16"
+      name: Ensure IAM policies that allow full "*:*" administrative privileges are not attached
+      rationale: The attack attaches AdministratorAccess (or an inline "*:*" policy) to a user; this control forbids exactly that, and remediation neutralises it.
+    - id: "1.15"
+      name: Ensure IAM Users Receive Permissions Only Through Groups
+      rationale: Attaching the policy directly to the user rather than via a group violates this; preventive companion control to the detection.
