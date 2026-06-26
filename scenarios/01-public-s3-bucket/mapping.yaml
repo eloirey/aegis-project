@@ -1,26 +1,59 @@
-# Compliance mapping for Scenario 01.
-# ⚠️ The control IDs below are ILLUSTRATIVE starting points. Before publishing, verify
-# each one against the official source and record the version (see docs/compliance/).
+# Compliance mapping for scenario 01 (public S3 bucket exposure).
+# Framework versions are pinned on purpose: control IDs shift between releases,
+# so an unversioned mapping would rot silently.
+#   ENS  -> RD 311/2022, Anexo II
+#   NIS2 -> Directive (EU) 2022/2555, Art. 21(2)
+#   CIS  -> AWS Foundations Benchmark v3.0.0
 
+scenario: 01-public-s3-bucket
 finding_id: PUBLIC_S3_BUCKET
-title: Publicly accessible S3 bucket
-severity: HIGH
-mitre_attack:
-  - "T1530"   # Data from Cloud Storage Object
+summary: >
+  A bucket policy granting anonymous s3:GetObject (Principal "*") exposed object
+  data to the internet. CloudTrail captures the PutBucketPolicy call, the detection
+  Lambda raises the finding, and the remediation Lambda blocks public access and
+  deletes the offending policy.
 
-controls:
-  ens:                          # Esquema Nacional de Seguridad (RD 311/2022) — VERIFY
-    - id: "mp.info"
-      name: "Protección de la información"
-    - id: "op.acc"
-      name: "Control de acceso"
-  nis2:                         # Directive (EU) 2022/2555 — VERIFY
-    - article: "Art. 21"
-      topic: "Cybersecurity risk-management measures"
-  cis_aws:                      # CIS AWS Foundations Benchmark — VERIFY version & id
-    - id: "2.1.x"
-      name: "Ensure S3 buckets block public access"
+detection:
+  log_source: CloudTrail
+  trigger_event: PutBucketPolicy
+  eventbridge_rule: aegis-project-01-s3-public
 
-remediation: >
-  Enable S3 Block Public Access at the bucket (and ideally account) level, and remove any
-  public ACL or bucket policy statement granting access to '*' / AllUsers.
+remediation:
+  actions:
+    - s3:PutBucketPublicAccessBlock   # all four flags set to true
+    - s3:DeleteBucketPolicy
+  outcome: bucket is no longer publicly readable
+
+compliance:
+  ens:
+    - id: op.acc.2
+      name: Requisitos de acceso
+      rationale: Anonymous access breached the defined access requirements; remediation restores controlled access.
+    - id: op.exp.2
+      name: Configuración de seguridad
+      rationale: A public bucket is an insecure configuration; remediation re-applies the secure baseline.
+    - id: op.exp.8
+      name: Registro de la actividad
+      rationale: CloudTrail records the PutBucketPolicy event that makes detection possible.
+    - id: op.mon.1
+      name: Detección de intrusión
+      rationale: The EventBridge rule and detection Lambda surface the exposure in near real time.
+
+  nis2:
+    - id: Art. 21(2)(b)
+      name: Incident handling
+      rationale: The automated detect-and-remediate loop is the incident-handling response for this exposure.
+    - id: Art. 21(2)(e)
+      name: Security in acquisition, development and maintenance (vulnerability handling)
+      rationale: The misconfiguration is treated as a vulnerability that is detected and corrected automatically.
+    - id: Art. 21(2)(i)
+      name: Access control policies and asset management
+      rationale: Blocking public access enforces the access control policy on the affected asset.
+
+  cis_aws:
+    - id: "2.1.4"
+      name: Ensure that S3 Buckets are configured with 'Block public access (bucket settings)'
+      rationale: Remediation applies the four bucket-level Block Public Access settings this control requires.
+    - id: "2.1.1"
+      name: Ensure S3 account-level Block Public Access is enabled
+      rationale: Preventive companion control; an account-level block would stop the exposure before it reaches any single bucket (future hardening).
