@@ -1,0 +1,61 @@
+# Compliance mapping for scenario 03 (exposed SSH -> port 22 open to the internet).
+# Framework versions are pinned on purpose: control IDs shift between releases,
+# so an unversioned mapping would rot silently.
+#   ENS  -> RD 311/2022, Anexo II (medidas)
+#   NIS2 -> Directive (EU) 2022/2555, Art. 21(2)
+#   CIS  -> AWS Foundations Benchmark v3.0.0, section 5 (Networking)
+
+scenario: 03-exposed-ssh
+finding_id: EXPOSED_SSH
+summary: >
+  A security group ingress rule opened SSH (port 22) to the entire internet
+  (0.0.0.0/0). CloudTrail captures the AuthorizeSecurityGroupIngress call, the
+  detection Lambda inspects the rule and raises the finding only when it reaches
+  port 22 from 0.0.0.0/0 or ::/0, and the remediation Lambda revokes that exact
+  rule - leaving every other rule on the group untouched and the change reversible.
+
+detection:
+  log_source: CloudTrail
+  trigger_events:
+    - AuthorizeSecurityGroupIngress
+  match: an ingress rule reaching port 22 (tcp/22, a range covering it, or all-traffic) from 0.0.0.0/0 or ::/0
+  eventbridge_rule: aegis-project-03-exposed-ssh
+
+remediation:
+  actions:
+    - ec2:RevokeSecurityGroupIngress   # removes only the offending rule
+  outcome: the exposed rule is revoked; the rest of the security group is left intact, so the action is reversible
+
+compliance:
+  ens:
+    - id: mp.com.1
+      name: Perímetro seguro
+      rationale: A firewall must let only previously authorized flows through; opening SSH to 0.0.0.0/0 breaks that perimeter, and remediation restores it.
+    - id: op.exp.2
+      name: Configuración de seguridad
+      rationale: The world-open ingress rule is an insecure configuration that detection flags and remediation corrects.
+    - id: op.exp.8
+      name: Registro de la actividad
+      rationale: CloudTrail records the AuthorizeSecurityGroupIngress event that makes detection possible.
+    - id: op.mon.1
+      name: Detección de intrusión
+      rationale: The EventBridge rule and detection Lambda surface the exposure in near real time.
+
+  nis2:
+    - id: Art. 21(2)(i)
+      name: Access control policies and asset management
+      rationale: Restricting which networks can reach administrative ports is an access control measure the remediation re-enforces.
+    - id: Art. 21(2)(e)
+      name: Security in acquisition, development and maintenance (vulnerability handling)
+      rationale: The world-open SSH port is a vulnerability that is detected and contained automatically.
+    - id: Art. 21(2)(b)
+      name: Incident handling
+      rationale: The automated detect-and-remediate loop is the incident-handling response for this exposure.
+
+  cis_aws:
+    - id: "5.2"
+      name: Ensure no security groups allow ingress from 0.0.0.0/0 to remote server administration ports
+      rationale: The attack opens tcp/22 to 0.0.0.0/0, exactly what this control forbids; detection flags it and remediation revokes it.
+    - id: "5.3"
+      name: Ensure no security groups allow ingress from ::/0 to remote server administration ports
+      rationale: The detector also covers the IPv6 (::/0) variant of the same exposure.
