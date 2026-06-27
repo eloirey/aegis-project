@@ -7,6 +7,9 @@
 
 scenario: 01-public-s3-bucket
 finding_id: PUBLIC_S3_BUCKET
+severity: HIGH
+mitre_attack:
+  - T1530
 summary: >
   A bucket policy granting anonymous s3:GetObject (Principal "*") exposed object
   data to the internet. CloudTrail captures the PutBucketPolicy call, the detection

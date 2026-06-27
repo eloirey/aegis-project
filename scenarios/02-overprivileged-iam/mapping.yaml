@@ -7,6 +7,10 @@
 
 scenario: 02-overprivileged-iam
 finding_id: PRIVILEGED_IAM
+severity: HIGH
+mitre_attack:
+  - T1078
+  - T1098
 summary: >
   An IAM identity holding a self-IAM-management primitive attached
   AdministratorAccess to itself, escalating from a single key to full admin.

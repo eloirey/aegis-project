@@ -7,6 +7,9 @@
 
 scenario: 03-exposed-ssh
 finding_id: EXPOSED_SSH
+severity: HIGH
+mitre_attack:
+  - T1133
 summary: >
   A security group ingress rule opened SSH (port 22) to the entire internet
   (0.0.0.0/0). CloudTrail captures the AuthorizeSecurityGroupIngress call, the
