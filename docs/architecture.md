@@ -1,4 +1,4 @@
-#Architecture
+## Architecture
 
 Aegis Project is built around a single repeatable loop. Every scenario plugs into the same
 shared backbone, so adding a new attack means adding a folder — not rewriting anything.
@@ -13,8 +13,9 @@ shared backbone, so adding a new attack means adding a folder — not rewriting 
    detection Lambda, which inspects the event and raises a structured **finding**.
 4. **Respond** — the finding is published to SNS; the remediation Lambda is subscribed and
    auto-fixes the resource (e.g. block public access, quarantine the identity, revoke ingress).
-5. **Map** — every finding is tied to the **ENS / NIS2 / CIS** controls it violates (today via
-   each scenario's `mapping.yaml`; runtime enrichment is the planned next step — see *Engine*).
+5. **Map** — every finding is tied to the **ENS / NIS2 / CIS** controls it violates. The
+   enrichment engine that attaches them is implemented and tested; wiring it into the live
+   Lambda path is the remaining step (see *Engine*).
 
 Detection and remediation are **decoupled through SNS** so a single finding can fan out to
 several responders.
@@ -28,7 +29,7 @@ The shared, always-on backbone every scenario depends on:
 - **SNS** — `aegis-project-alerts` is the central human-alerting channel.
 - **Log bucket + CloudWatch** — log storage and Lambda observability.
 
-### Scenario (`scenarios/NN-name/`) — 01 & 02 built, 03 planned
+### Scenario (`scenarios/NN-name/`) — 01, 02 & 03 built
 A self-contained unit with five parts that always follow the same shape:
 - `infra/` — Terraform that creates the **vulnerable** resource.
 - `attack/` — a Python script that **reproduces the exploit** safely.
@@ -40,17 +41,20 @@ A self-contained unit with five parts that always follow the same shape:
 > **Region note:** regional scenarios live in `eu-west-1`. IAM is global, so its CloudTrail
 > events are delivered to EventBridge in `us-east-1` — scenario 02's rule and Lambdas run there.
 
-### Engine (`engine/`) — scaffolded, not yet wired in
-A shared Python package intended to remove boilerplate from the Lambdas. **Today it is a
-skeleton (`NotImplementedError` stubs); the detection and remediation Lambdas are currently
-self-contained and do not import it.** Implementing it is the project's next milestone:
-- `mapping/` — load each scenario's `mapping.yaml` and **enrich a finding with its controls
-  at runtime**, turning a raw event into compliance-aware context (the signature feature).
-- `notifier/` — format an enriched finding into a readable alert and publish it.
-- `detection/`, `remediation/` — shared helpers so scenarios stop repeating logic.
+### Engine (`engine/`) — library implemented & tested, runtime wiring pending
+A shared Python package that removes boilerplate from the Lambdas:
+- `mapping/` — loads a scenario's `mapping.yaml` and **enriches a finding with its severity,
+  MITRE techniques and ENS / NIS2 / CIS controls**, turning a raw event into compliance-aware
+  context (the signature feature). Implemented and covered by `tests/`.
+- `notifier/` — formats an enriched finding into a readable alert and publishes it to the
+  alerts topic. Implemented.
+- `detection/`, `remediation/` — reserved for shared helpers (still empty).
 
-Until the engine lands, the compliance mapping is documentation-level (the `mapping.yaml`
-files), not part of the live alert payload.
+The library is done and tested; what remains is **wiring it into the detection Lambdas at
+runtime** (inject each `mapping.yaml`'s controls as Lambda config and call `enrich` +
+`publish`) so the enriched alert reaches the `aegis-project-alerts` email subscription. Until
+then, the compliance mapping is exercised by the engine and its tests but not yet part of the
+live alert path.
 
 ## Design principles
 1. **Reproducible** — everything is Terraform; `apply` to build, `destroy` to remove.
@@ -66,4 +70,5 @@ files), not part of the live alert payload.
 - **Why SNS between detect and respond?** Decoupling lets one finding fan out to multiple
   responders (and later: email, Slack, a dashboard) without touching the detector.
 - **Why a mapping layer?** It turns raw security events into business/compliance language —
-  the differentiator. Wiring it into the runtime (the `engine/`) is the planned next step.
+  the differentiator. The engine that does this is implemented and tested; wiring it into the
+  Lambdas at runtime is the remaining step.
