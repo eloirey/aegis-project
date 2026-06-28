@@ -24,10 +24,47 @@ variable "project_name" {
   default = "aegis-project"
 }
 
+data "aws_caller_identity" "current" {}
+
+# Resolve the compliance mapping at deploy time and inject it as Lambda config, so the
+# function enriches findings without parsing YAML at runtime. The core alerts topic always
+# lives in eu-west-1; build its ARN rather than depending on a data source.
+locals {
+  mapping = yamldecode(file("${path.module}/../mapping.yaml"))
+  enrichment = jsonencode({
+    severity     = local.mapping.severity
+    mitre_attack = local.mapping.mitre_attack
+    controls = {
+      ens     = [for c in local.mapping.compliance.ens : c.id]
+      nis2    = [for c in local.mapping.compliance.nis2 : c.id]
+      cis_aws = [for c in local.mapping.compliance.cis_aws : c.id]
+    }
+  })
+  alert_topic_arn = "arn:aws:sns:eu-west-1:${data.aws_caller_identity.current.account_id}:${var.project_name}-alerts"
+}
+
+# Package the handler together with the shared engine (notifier only — no YAML at runtime).
+# file() pulls the real engine modules straight from the repo, so nothing is duplicated.
 data "archive_file" "detect_zip" {
   type        = "zip"
-  source_file = "${path.module}/detect_handler.py"
   output_path = "${path.module}/detect_handler.zip"
+
+  source {
+    content  = file("${path.module}/detect_handler.py")
+    filename = "detect_handler.py"
+  }
+  source {
+    content  = file("${path.module}/../../../engine/__init__.py")
+    filename = "engine/__init__.py"
+  }
+  source {
+    content  = file("${path.module}/../../../engine/notifier/__init__.py")
+    filename = "engine/notifier/__init__.py"
+  }
+  source {
+    content  = file("${path.module}/../../../engine/notifier/notify.py")
+    filename = "engine/notifier/notify.py"
+  }
 }
 
 resource "aws_sns_topic" "findings" {
@@ -59,7 +96,7 @@ resource "aws_iam_role_policy" "detect_publish" {
     Statement = [{
       Effect   = "Allow"
       Action   = "sns:Publish"
-      Resource = aws_sns_topic.findings.arn
+      Resource = [aws_sns_topic.findings.arn, local.alert_topic_arn]
     }]
   })
 }
@@ -75,6 +112,8 @@ resource "aws_lambda_function" "detect" {
   environment {
     variables = {
       FINDINGS_TOPIC_ARN = aws_sns_topic.findings.arn
+      ALERT_TOPIC_ARN    = local.alert_topic_arn
+      ENRICHMENT         = local.enrichment
     }
   }
 }

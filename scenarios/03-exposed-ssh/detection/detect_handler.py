@@ -5,11 +5,17 @@ import os
 
 import boto3
 
+from engine.notifier.notify import publish as send_alert
+
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 sns = boto3.client("sns")
 TOPIC_ARN = os.environ["FINDINGS_TOPIC_ARN"]
+
+# Compliance controls + severity + MITRE are resolved from mapping.yaml at deploy time
+# (Terraform yamldecode) and injected here, so the Lambda needs no YAML parsing at runtime.
+ENRICHMENT = json.loads(os.environ.get("ENRICHMENT", "{}"))
 
 SSH_PORT = 22
 WORLD_V4 = "0.0.0.0/0"
@@ -68,8 +74,18 @@ def handler(event, context):
                 "v6": v6,
             },
         }
+        # Findings are never raw: attach the compliance mapping before anyone consumes them.
+        finding.update(ENRICHMENT)
         logger.info("Finding: %s", json.dumps(finding))
+
         sns.publish(TopicArn=TOPIC_ARN, Message=json.dumps(finding))
+
+        # A compliance-aware alert to the ops inbox. Best-effort: a notification failure must
+        # never stop the finding from reaching remediation.
+        try:
+            send_alert(finding)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Alert publish failed: %s", e)
         return finding
 
     logger.info("Ignored non-exposing %s on %s by %s", action, group_id, actor)
