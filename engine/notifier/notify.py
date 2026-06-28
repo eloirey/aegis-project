@@ -20,10 +20,19 @@ _TITLES = {
 _sns = None
 
 
+def _region_from_arn(arn):
+    # arn:aws:sns:<region>:<account>:<name> — the alerts topic may live in a different
+    # region than the Lambda (the IAM scenario runs in us-east-1, alerts in eu-west-1),
+    # so publish through a client bound to the topic's own region.
+    parts = arn.split(":")
+    return parts[3] if len(parts) > 3 and parts[3] else None
+
+
 def _client():
     global _sns
     if _sns is None:
-        _sns = boto3.client("sns")
+        region = _region_from_arn(TOPIC_ARN)
+        _sns = boto3.client("sns", region_name=region) if region else boto3.client("sns")
     return _sns
 
 
