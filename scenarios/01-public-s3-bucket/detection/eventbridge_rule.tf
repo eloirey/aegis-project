@@ -40,10 +40,11 @@ locals {
       cis_aws = [for c in local.mapping.compliance.cis_aws : c.id]
     }
   })
-  alert_topic_arn = "arn:aws:sns:eu-west-1:${data.aws_caller_identity.current.account_id}:${var.project_name}-alerts"
+  alert_topic_arn    = "arn:aws:sns:eu-west-1:${data.aws_caller_identity.current.account_id}:${var.project_name}-alerts"
+  findings_table_arn = "arn:aws:dynamodb:eu-west-1:${data.aws_caller_identity.current.account_id}:table/${var.project_name}-findings"
 }
 
-# Package the handler together with the shared engine (notifier only - no YAML at runtime).
+# Package the handler together with the shared engine (notifier + store - no YAML at runtime).
 # file() pulls the real engine modules straight from the repo, so nothing is duplicated.
 data "archive_file" "detect_zip" {
   type        = "zip"
@@ -64,6 +65,14 @@ data "archive_file" "detect_zip" {
   source {
     content  = file("${path.module}/../../../engine/notifier/notify.py")
     filename = "engine/notifier/notify.py"
+  }
+  source {
+    content  = file("${path.module}/../../../engine/store/__init__.py")
+    filename = "engine/store/__init__.py"
+  }
+  source {
+    content  = file("${path.module}/../../../engine/store/findings.py")
+    filename = "engine/store/findings.py"
   }
 }
 
@@ -101,6 +110,19 @@ resource "aws_iam_role_policy" "detect_publish" {
   })
 }
 
+resource "aws_iam_role_policy" "detect_persist" {
+  name = "${var.project_name}-01-detect-persist"
+  role = aws_iam_role.detect.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "dynamodb:PutItem"
+      Resource = local.findings_table_arn
+    }]
+  })
+}
+
 resource "aws_lambda_function" "detect" {
   function_name    = "${var.project_name}-01-detect"
   role             = aws_iam_role.detect.arn
@@ -111,9 +133,11 @@ resource "aws_lambda_function" "detect" {
 
   environment {
     variables = {
-      FINDINGS_TOPIC_ARN = aws_sns_topic.findings.arn
-      ALERT_TOPIC_ARN    = local.alert_topic_arn
-      ENRICHMENT         = local.enrichment
+      FINDINGS_TOPIC_ARN    = aws_sns_topic.findings.arn
+      ALERT_TOPIC_ARN       = local.alert_topic_arn
+      ENRICHMENT            = local.enrichment
+      FINDINGS_TABLE        = "${var.project_name}-findings"
+      FINDINGS_TABLE_REGION = "eu-west-1"
     }
   }
 }
