@@ -5,6 +5,8 @@ import logging
 import boto3
 from botocore.exceptions import ClientError
 
+from engine.store.findings import record_remediation
+
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
@@ -26,6 +28,15 @@ def _ip_permission(rule):
     return perm
 
 
+def _persist(finding):
+    # Best-effort: flip the dashboard row to remediated, never fail the remediation itself
+    # over a bookkeeping error.
+    try:
+        record_remediation(finding)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Persist remediation failed: %s", e)
+
+
 def handler(event, context):
     finding = json.loads(event["Records"][0]["Sns"]["Message"])
 
@@ -42,8 +53,10 @@ def handler(event, context):
         # Already revoked (e.g. a duplicate event): the desired state is reached anyway.
         if e.response["Error"]["Code"] == "InvalidPermission.NotFound":
             logger.info("Rule already absent on %s", group_id)
+            _persist(finding)
             return {"already_clear": group_id}
         raise
 
     logger.info("Revoked exposed SSH rule on %s", group_id)
+    _persist(finding)
     return {"remediated": group_id}
