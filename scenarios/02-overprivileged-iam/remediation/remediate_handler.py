@@ -4,6 +4,8 @@ import logging
 
 import boto3
 
+from engine.store.findings import record_remediation
+
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
@@ -53,6 +55,15 @@ QUARANTINE_DOCUMENT = {
 }
 
 
+def _persist(finding):
+    # Best-effort: flip the dashboard row to remediated, never fail the remediation itself
+    # over a bookkeeping error.
+    try:
+        record_remediation(finding)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Persist remediation failed: %s", e)
+
+
 def handler(event, context):
     finding = json.loads(event["Records"][0]["Sns"]["Message"])
 
@@ -77,5 +88,6 @@ def handler(event, context):
         logger.warning("Unknown principal_type for %s; no action taken", name)
         return {"skipped": name}
 
+    _persist(finding)
     logger.info("Quarantined %s %s for finding %s", principal_type, name, finding["finding_id"])
     return {"quarantined": name, "principal_type": principal_type}

@@ -31,10 +31,33 @@ data "aws_sns_topic" "findings" {
   name = "${var.project_name}-findings"
 }
 
+# The findings table lives in the core (eu-west-1); this stack runs in us-east-1 and writes
+# to it cross-region, the same way the notifier reaches the alerts topic.
+locals {
+  findings_table_arn = "arn:aws:dynamodb:eu-west-1:${data.aws_caller_identity.current.account_id}:table/${var.project_name}-findings"
+}
+
+# The handler now ships with the engine so it can flip the finding's row to remediated.
 data "archive_file" "remediate_zip" {
   type        = "zip"
-  source_file = "${path.module}/remediate_handler.py"
   output_path = "${path.module}/remediate_handler.zip"
+
+  source {
+    content  = file("${path.module}/remediate_handler.py")
+    filename = "remediate_handler.py"
+  }
+  source {
+    content  = file("${path.module}/../../../engine/__init__.py")
+    filename = "engine/__init__.py"
+  }
+  source {
+    content  = file("${path.module}/../../../engine/store/__init__.py")
+    filename = "engine/store/__init__.py"
+  }
+  source {
+    content  = file("${path.module}/../../../engine/store/findings.py")
+    filename = "engine/store/findings.py"
+  }
 }
 
 resource "aws_iam_role" "remediate" {
@@ -75,6 +98,19 @@ resource "aws_iam_role_policy" "remediate_iam" {
   })
 }
 
+resource "aws_iam_role_policy" "remediate_persist" {
+  name = "${var.project_name}-02-remediate-persist"
+  role = aws_iam_role.remediate.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "dynamodb:UpdateItem"
+      Resource = local.findings_table_arn
+    }]
+  })
+}
+
 resource "aws_lambda_function" "remediate" {
   function_name    = "${var.project_name}-02-remediate"
   role             = aws_iam_role.remediate.arn
@@ -82,6 +118,13 @@ resource "aws_lambda_function" "remediate" {
   runtime          = "python3.12"
   filename         = data.archive_file.remediate_zip.output_path
   source_code_hash = data.archive_file.remediate_zip.output_base64sha256
+
+  environment {
+    variables = {
+      FINDINGS_TABLE        = "${var.project_name}-findings"
+      FINDINGS_TABLE_REGION = "eu-west-1"
+    }
+  }
 }
 
 resource "aws_sns_topic_subscription" "remediate" {

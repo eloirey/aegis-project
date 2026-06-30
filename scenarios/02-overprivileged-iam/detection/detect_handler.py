@@ -7,6 +7,7 @@ from urllib.parse import unquote
 import boto3
 
 from engine.notifier.notify import publish as send_alert
+from engine.store.findings import record_detection
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -84,6 +85,7 @@ def handler(event, context):
 
     principal_type, principal_name = _principal(params)
     finding = {
+        "id": detail.get("eventID"),
         "finding_id": "PRIVILEGED_IAM",
         "resource": principal_name,
         "actor": actor,
@@ -93,6 +95,13 @@ def handler(event, context):
     # Findings are never raw: attach the compliance mapping before anyone consumes them.
     finding.update(ENRICHMENT)
     logger.info("Finding: %s", json.dumps(finding))
+
+    # Persist the detection so the live dashboard can track this finding; best-effort,
+    # a storage failure must not stop it from reaching remediation.
+    try:
+        record_detection(finding)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Persist detection failed: %s", e)
 
     sns.publish(TopicArn=TOPIC_ARN, Message=json.dumps(finding))
 
