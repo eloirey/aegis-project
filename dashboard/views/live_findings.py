@@ -210,7 +210,7 @@ st.markdown(
     '<div>Built by Eloi Rey · Aegis Project</div>'
     '<div class="links">'
     '<a href="https://github.com/eloirey/aegis-project" target="_blank">GitHub</a>'
-    '<a href="https://www.linkedin.com/in/eloi-rey-velardiez-93940338b" target="_blank">LinkedIn</a>'
+    '<a href="https://www.linkedin.com/in/eloi-rey/" target="_blank">LinkedIn</a>'
     '<a href="https://eloirey.github.io" target="_blank">Portfolio</a>'
     '</div></div>',
     unsafe_allow_html=True,
