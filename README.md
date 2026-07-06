@@ -24,8 +24,6 @@
 
 ## Demo
 
-[![Aegis Project demo](https://img.youtube.com/vi/ur0KWMKvw1Y/maxresdefault.jpg)](https://youtu.be/ur0KWMKvw1Y)
-
 ▶️ **[Watch the 2-minute demo](https://youtu.be/ur0KWMKvw1Y)** — attack launched on the left, the live findings dashboard reacting on the right: detected in amber, auto-remediated in green, in ~3 seconds.
 
 ---
