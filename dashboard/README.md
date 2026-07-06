@@ -1,17 +1,25 @@
-# Dashboard  *(Phase 4)*
+# Dashboard
 
-The visual layer that makes the demo pop. Fastest path: a **Streamlit** app that reads
-findings (from SNS history, a DynamoDB table, or CloudWatch Logs) and shows, per scenario:
+A multipage **Streamlit** app that visualises the range. Launch it with:
 
-- timeline: attack launched → detected → remediated
-- time-to-detect and time-to-remediate metrics
-- the compliance controls each finding hit (ENS / NIS2 / CIS)
-- a live "lab status" panel
-
-Run locally:
 ```bash
 streamlit run dashboard/app.py
 ```
 
-`app.py` is intentionally not scaffolded yet — design it once scenario 01 emits real
-findings so the data model is driven by reality, not guesses.
+## Pages
+
+### Live Findings (`views/live_findings.py`)
+The centrepiece of the demo. Reads the DynamoDB lifecycle table in real time (auto-refreshing
+via `st.fragment`) and shows each finding the moment it's detected — in amber — flipping to
+remediated in green seconds later. Includes KPIs (total findings, active threats,
+auto-remediated, average response time), a detected → remediated timeline per finding, and the
+ENS / NIS2 / CIS controls each one hit.
+
+### Compliance Coverage (`views/coverage.py`)
+Reads every scenario's `mapping.yaml` (no AWS connection needed) and shows how many controls the
+range exercises under ENS (RD 311/2022), NIS2 Art. 21 and CIS AWS Foundations v3.0.0 — with an
+Altair breakdown per framework and a per-scenario detail card.
+
+## Theme
+
+The shared dark navy/cyan theme lives in `.streamlit/config.toml` at the repo root.
