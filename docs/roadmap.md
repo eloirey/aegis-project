@@ -1,53 +1,43 @@
-# 🗺️ Roadmap
+# Roadmap
 
-This is a multi-month project meant to grow with you. Build it in phases — a working
-small version beats an unfinished big one. Each phase ends with something you can
-**demo and commit**.
+Aegis was built in phases — a working small version beats an unfinished big one, and each phase ended with something demoable and committed. Phases 0–5 are **done**; the range is published and verified against real AWS. What follows is where it goes next.
 
-## Phase 0 — Foundations (week 1)
-- [ ] Create a **dedicated AWS sandbox account** (not your main one).
-- [ ] Configure AWS CLI + an IAM user/role with the permissions you need.
-- [ ] Set an **AWS Budget alert** (e.g. 5 €) so you never get surprised.
-- [ ] Install Terraform, Python 3.12, and the project dependencies.
-- [ ] Read `docs/architecture.md` and `docs/threat-model.md`.
+## Shipped
 
-## Phase 1 — Core backbone (week 2)
-- [ ] Implement `infra/core`: CloudTrail (org/account trail), an EventBridge bus,
-      an SNS topic for alerts, and an S3 bucket for logs.
-- [ ] Subscribe your email to the SNS topic and confirm you receive a test alert.
-- [ ] `./scripts/deploy.sh core` works end to end.
+### Phase 0 — Foundations
+Dedicated AWS sandbox account, AWS CLI + scoped IAM, a Budget alert, and the toolchain (Terraform, Python 3.12). Architecture and threat model written up in `docs/`.
 
-## Phase 2 — Scenario 01 end to end (weeks 3–4) ← **the MVP**
-- [ ] `infra/`: Terraform that creates a deliberately public S3 bucket.
-- [ ] `attack/`: a Python script that demonstrates anonymous read of the bucket.
-- [ ] `detection/`: an EventBridge rule that fires on the relevant CloudTrail event
-      (`PutBucketAcl` / `PutBucketPolicy` / public access change) → detection Lambda.
-- [ ] `remediation/`: a Lambda that re-enables Block Public Access and notifies via SNS.
-- [ ] `mapping.yaml`: map the finding to ENS / NIS2 / CIS.
-- [ ] **Record yourself running it.** This clip is your portfolio gold.
+### Phase 1 — Core backbone
+`infra/core` deployed end to end: a multi-region **CloudTrail** trail, the **EventBridge** bus, the **SNS** `aegis-project-alerts` topic (email subscription confirmed), an S3 log bucket, and the **DynamoDB** findings table. `./scripts/deploy.sh core` works.
 
-> ✅ At the end of Phase 2 you already have a complete, demoable project.
+### Phase 2 — Scenario 01 (the MVP)
+Public S3 bucket, end to end: vulnerable Terraform → scripted attack → EventBridge + detection Lambda → remediation Lambda (Block Public Access restored) → `mapping.yaml`. The first complete deploy → attack → detect → respond → map loop.
 
-## Phase 3 — Breadth (weeks 5–7)
-- [ ] Scenario 02: over-privileged IAM → privilege escalation, detect + remediate.
-- [ ] Scenario 03: security group open to `0.0.0.0/0` on port 22 → detect + remediate.
-- [ ] Refactor anything repeated into `infra/modules` and `engine/`.
+### Phase 3 — Breadth
+Two more scenarios, each verified against real AWS:
+- **02 — Over-privileged IAM** → privilege escalation, contained with a reversible explicit-deny quarantine. Runs in `us-east-1` (IAM is global) while writing findings cross-region.
+- **03 — Exposed SSH** (`0.0.0.0/0` on port 22) → the offending ingress rule is revoked surgically, leaving the rest of the security group intact.
 
-## Phase 4 — Visualization & story (weeks 8–9)
-- [ ] Build the `dashboard/` (Streamlit is the fastest path) showing, per scenario:
-      attack launched → detection time → remediation time → compliance controls hit.
-- [ ] Record a **2–3 minute demo video** with narration. Embed it in the README.
-- [ ] Export a clean architecture diagram to `docs/diagrams/architecture.png`.
+### Phase 4 — Visualization & story
+- A multipage **Streamlit** dashboard: a real-time **Live Findings** view (detected → remediated) and a **Compliance Coverage** view.
+- A **2-minute demo video** with narration, embedded in the README.
+- A clean **architecture diagram** at `docs/diagrams/architecture.png`.
 
-## Phase 5 — Engineering polish (week 10+)
-- [ ] GitHub Actions: run `tfsec` / `Checkov` on every PR (security scanning your own IaC
-      is a great look — you scan the lab too).
-- [ ] Unit tests for the engine (`tests/`).
-- [ ] Complete `docs/compliance/ens-nis2-mapping.md`.
-- [ ] Write each scenario README as a mini incident report.
+### Phase 5 — Engineering polish
+- **GitHub Actions** running `tfsec` and `Checkov` on every push (IaC security scanning — the lab scans itself).
+- A **pytest** suite for the engine (mapping + persistence, mocked with `moto`).
+- The full **compliance mapping** documented, with a rationale per control.
+- A **DynamoDB persistence layer** (`engine/store`) recording the finding lifecycle, powering the live dashboard.
 
-## Stretch ideas (make it truly yours)
-- Add a "detection-as-code" format (Sigma-style rules) instead of hardcoded logic.
-- Add a GuardDuty-based detection path and compare it to your custom detections.
-- Generate a PDF "compliance report" from the findings.
-- Add a cost report showing the lab stays within Free Tier.
+## What's next
+
+- **More scenarios** — the pattern extends by adding a folder; each new one covers more ENS / NIS2 / CIS controls (e.g. unencrypted resources, disabled logging, public RDS).
+- **Resilience** — dead-letter queues and retries on the detection path, so a transient Lambda failure never silently drops a finding.
+- **A blue-team companion project** — threat hunting / a mini-SIEM operating *over* this infrastructure: Aegis builds the automated defence; the next project is about operating and hunting within it.
+
+## Stretch ideas
+
+- A **detection-as-code** format (Sigma-style rules) instead of logic baked into the Lambdas.
+- A **GuardDuty**-based detection path, compared side by side with the custom detections.
+- A generated **PDF compliance report** built from the findings.
+- A **cost report** proving the lab stays within the Free Tier.
