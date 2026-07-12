@@ -1,4 +1,4 @@
-# 🎬 Scenarios
+# Scenarios
 
 Each scenario is a **self-contained incident** that plugs into the shared core backbone.
 They all follow the exact same internal structure, so the range grows by **copying the
