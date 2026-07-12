@@ -29,3 +29,7 @@ aws_credentials
 .DS_Store
 .idea/
 .vscode/
+
+# Terraform variable files (may contain the alert email)
+*.tfvars
+*.tfvars.json
