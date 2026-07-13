@@ -1,7 +1,12 @@
 boto3>=1.34
 botocore>=1.34
 PyYAML>=6.0
+
 # Dev / tooling
 pytest>=8.0
-# Dashboard (optional, Phase 4)
+moto>=5.0
+
+# Dashboard
 streamlit>=1.33
+altair>=5.0
+pandas>=2.0
