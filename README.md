@@ -32,13 +32,7 @@
 
 Most "cloud security" portfolio projects are either a thin wrapper around an existing scanner, or a static *"I deployed a web app on AWS"* demo. Aegis takes a different angle: it reproduces the **full lifecycle of a real cloud security incident**, end to end, and does it automatically.
 
-```
-  ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐
-  │  DEPLOY  │─▶ │  ATTACK  │─▶ │  DETECT  │─▶ │ RESPOND  │─▶ │   MAP    │
-  │ vuln IaC │   │ scripted │   │CloudTrail│   │  auto-   │   │ ENS/NIS2 │
-  │Terraform │   │ exploit  │   │EventBridge│  │remediate │   │  /CIS    │
-  └──────────┘   └──────────┘   └──────────┘   └──────────┘   └──────────┘
-```
+**Deploy → Attack → Detect → Respond → Map** — the full lifecycle of a cloud security incident, automated end to end.
 
 You don't just *talk* about misconfigurations — you deploy them, exploit them, catch them, fix them automatically, and prove which compliance controls each one violated.
 
